@@ -1,9 +1,6 @@
 ---
 name: 系统体检
 description: 给电脑做个全身检查，帮你查看CPU温度、内存占用、磁盘健康状态等系统运行情况
-author: PowerfulGun
-icon: 🩺
-version: "1.0"
 ---
 
 # 系统体检 Skill

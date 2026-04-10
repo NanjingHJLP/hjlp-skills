@@ -1,9 +1,6 @@
 ---
 name: 课程大纲生成
 description: 课程大纲生成 讲义结构化 拆章节 学习路径设计 知识点梳理 章节结构 前置知识
-author: PowerfulGun
-icon: 📚
-version: "2.0"
 ---
 
 # 课程大纲生成 Skill

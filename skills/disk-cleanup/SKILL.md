@@ -1,9 +1,6 @@
 ---
 name: 磁盘与临时文件清理
 description: 磁盘空间清理 临时文件Temp 回收站清空 磁盘清理 空间不足 大文件扫描 C盘满了
-author: PowerfulGun
-icon: 🧹
-version: "1.1"
 ---
 
 # 磁盘与临时文件清理 Skill

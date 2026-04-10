@@ -1,0 +1,118 @@
+# 智能学习排程配置模板
+# 复制此文件并修改为你的实际课程和任务
+
+# ==================== 固定课程 ====================
+courses:
+  - name: 高等数学
+    day: 周一
+    start_time: "08:00"
+    end_time: "09:40"
+    location: 3教201
+    type: 必修
+
+  - name: 大学英语
+    day: 周二
+    start_time: "14:00"
+    end_time: "15:40"
+    location: 5教102
+    type: 必修
+
+  - name: 计算机基础
+    day: 周三
+    start_time: "10:00"
+    end_time: "11:40"
+    location: 机房A
+    type: 实验
+
+# ==================== 学习任务 ====================
+tasks:
+  # 考试/作业任务（有截止日期）
+  - name: 高数作业-第三章
+    subject: 高等数学
+    estimated_duration: 120  # 分钟
+    deadline: "2026-04-05T23:59:00"
+    importance: 9  # 1-10
+    difficulty: hard  # easy/medium/hard
+
+  - name: 英语听力练习Unit 5
+    subject: 大学英语
+    estimated_duration: 45
+    deadline: "2026-04-04T23:59:00"
+    importance: 7
+    difficulty: medium
+
+  # 日常任务（无截止日期）
+  - name: 背单词-List 12
+    subject: 大学英语
+    estimated_duration: 30
+    importance: 6
+    difficulty: easy
+
+  - name: 错题整理
+    subject: 高等数学
+    estimated_duration: 60
+    importance: 6
+    difficulty: medium
+
+# ==================== 用户偏好 ====================
+preferences:
+  # 高效学习时段（困难任务优先安排）
+  productive_hours:
+    - "19:00-22:00"  # 晚间高效时段
+    - "09:00-11:00"  # 上午高效时段
+
+  # 每日时间范围
+  day_start: "08:00"  # 最早开始学习
+  day_end: "23:00"   # 最晚结束学习
+
+  # 休息设置
+  break_duration: 15     # 任务间隔休息（分钟）
+  min_slot_size: 30      # 最小时间块（分钟）
+  max_continuous_study: 120  # 最大连续学习时间（分钟）
+
+  # 时段偏好
+  prefer_morning: false
+  prefer_evening: true
+
+# ==================== 日历同步设置 ====================
+calendar_sync:
+  # 选择要同步的日历平台
+  providers:
+    - google      # Google Calendar
+    # - outlook   # Microsoft Outlook
+    # - apple     # Apple iCloud
+    # - local     # 仅导出本地ICS文件
+
+  # 提醒设置
+  reminders:
+    class:
+      before_start: 15  # 课前15分钟提醒
+    task:
+      before_start: 5   # 任务开始前5分钟
+      before_deadline: 1440  # 截止前1天（分钟）
+
+# ==================== 排程策略 ====================
+scheduling:
+  # 优先级权重
+  priority_weights:
+    urgency: 0.4      # 截止日期紧急度
+    importance: 0.4   # 重要性
+    difficulty: 0.2   # 难度
+
+  # 约束设置
+  constraints:
+    # 硬约束（必须满足）
+    no_conflict: true        # 不冲突
+    respect_meals: true      # 避开用餐时间
+    respect_sleep: true      # 不侵占睡眠时间
+
+    # 软约束（尽量满足）
+    prefer_continuity: true  # 同科目尽量连续
+    balance_load: true       # 均衡每日负荷
+
+# ==================== 使用说明 ====================
+# 1. 修改上方的课程和任务为你的实际情况
+# 2. 调整 preferences 中的时间设置
+# 3. 选择需要的日历同步平台
+# 4. 保存为 my-plan.yaml
+# 5. 运行: python scripts/schedule_generator.py --input my-plan.yaml

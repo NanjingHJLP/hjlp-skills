@@ -1,0 +1,10 @@
+Metadata-Version: 2.4
+Name: cli-anything-softwaremove
+Version: 1.0.0
+Summary: CLI harness for SoftwareMove - move installed software between disks
+Requires-Python: >=3.10
+Requires-Dist: click>=8.0.0
+Requires-Dist: prompt-toolkit>=3.0.0
+Dynamic: requires-dist
+Dynamic: requires-python
+Dynamic: summary

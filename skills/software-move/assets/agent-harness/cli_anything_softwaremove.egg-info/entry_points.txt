@@ -1,0 +1,2 @@
+[console_scripts]
+cli-anything-softwaremove = cli_anything.softwaremove.softwaremove_cli:main

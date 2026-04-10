@@ -1,0 +1,60 @@
+{
+  "tasks": [
+    {
+      "name": "高数作业-第三章",
+      "subject": "高等数学",
+      "estimated_duration": 120,
+      "deadline": "2026-04-05T23:59:00",
+      "importance": 9,
+      "difficulty": "hard"
+    },
+    {
+      "name": "英语听力练习Unit 5",
+      "subject": "大学英语",
+      "estimated_duration": 45,
+      "deadline": "2026-04-04T23:59:00",
+      "importance": 7,
+      "difficulty": "medium"
+    },
+    {
+      "name": "背单词-List 12",
+      "subject": "大学英语",
+      "estimated_duration": 30,
+      "deadline": null,
+      "importance": 6,
+      "difficulty": "easy"
+    },
+    {
+      "name": "预习计算机实验",
+      "subject": "计算机基础",
+      "estimated_duration": 60,
+      "deadline": "2026-04-02T10:00:00",
+      "importance": 8,
+      "difficulty": "medium"
+    },
+    {
+      "name": "高数期中复习-前3章",
+      "subject": "高等数学",
+      "estimated_duration": 180,
+      "deadline": "2026-04-10T08:00:00",
+      "importance": 10,
+      "difficulty": "hard"
+    },
+    {
+      "name": "英语作文练习",
+      "subject": "大学英语",
+      "estimated_duration": 90,
+      "deadline": "2026-04-08T23:59:00",
+      "importance": 7,
+      "difficulty": "medium"
+    },
+    {
+      "name": "错题整理",
+      "subject": "高等数学",
+      "estimated_duration": 60,
+      "deadline": null,
+      "importance": 6,
+      "difficulty": "medium"
+    }
+  ]
+}

@@ -1,0 +1,167 @@
+{
+  "template_name": "党政机关公文模板",
+  "description": "根据GB/T 9704-2012《党政机关公文格式》国家标准定义的公文模板，包含完整的版头、主体、版记要素",
+  "standard": "GB/T 9704-2012",
+  "paper_size": "A4",
+  "margin": {
+    "top": "37mm",
+    "bottom": "35mm",
+    "left": "28mm",
+    "right": "26mm"
+  },
+  "print_area": {
+    "width": "156mm",
+    "height": "225mm",
+    "lines_per_page": 22,
+    "chars_per_line": 28
+  },
+  "font_spec": {
+    "title": { "font": "小标宋体", "size": "二号" },
+    "body": { "font": "仿宋", "size": "三号" },
+    "heading1": { "font": "黑体", "size": "三号" },
+    "heading2": { "font": "楷体", "size": "三号" },
+    "heading3": { "font": "仿宋（加粗）", "size": "三号" },
+    "footer": { "font": "仿宋", "size": "四号" },
+    "org_logo": { "font": "小标宋体", "size": "自定", "color": "红色" }
+  },
+  "fields": {
+    "版头部分": {
+      "copy_number": {
+        "label": "份号",
+        "type": "string",
+        "description": "6位3号阿拉伯数字，顶格编排在版心左上角第一行",
+        "required": false,
+        "example": "000001"
+      },
+      "security_level": {
+        "label": "密级和保密期限",
+        "type": "string",
+        "description": "3号黑体字，顶格编排在版心左上角第二行",
+        "required": false,
+        "options": ["绝密", "机密", "秘密"],
+        "example": "秘密★1年"
+      },
+      "urgency": {
+        "label": "紧急程度",
+        "type": "string",
+        "description": "3号黑体字，顶格编排在版心左上角",
+        "required": false,
+        "options": ["特急", "加急"],
+        "example": "特急"
+      },
+      "sender": {
+        "label": "发文机关",
+        "type": "string",
+        "description": "发文机关全称或规范化简称，用于版头标志和署名。红色小标宋体字，居中",
+        "required": true,
+        "example": "国务院办公厅"
+      },
+      "doc_number": {
+        "label": "发文字号",
+        "type": "string",
+        "description": "发文机关标志下空二行，居中。年份用六角括号〔〕括入",
+        "required": false,
+        "example": "国办发〔2024〕1号"
+      },
+      "issuer": {
+        "label": "签发人",
+        "type": "string",
+        "description": "上行文需要。居右空一字，\"签发人\"三字用仿宋，姓名用楷体",
+        "required": false,
+        "example": "张三"
+      }
+    },
+    "主体部分": {
+      "title": {
+        "label": "公文标题",
+        "type": "string",
+        "description": "红色分隔线下空二行，二号小标宋体字，居中排布",
+        "required": true,
+        "example": "关于2024年春节放假安排的通知"
+      },
+      "doc_type": {
+        "label": "公文类型",
+        "type": "string",
+        "description": "15种法定公文类型之一",
+        "required": true,
+        "options": ["决议", "决定", "命令", "公报", "公告", "通告", "意见", "通知", "通报", "报告", "请示", "批复", "议案", "函", "纪要"],
+        "example": "通知"
+      },
+      "recipient": {
+        "label": "主送机关",
+        "type": "string",
+        "description": "标题下空一行，居左顶格，回行时仍顶格，最后标全角冒号",
+        "required": false,
+        "example": "各省、自治区、直辖市人民政府，国务院各部委、各直属机构"
+      },
+      "content": {
+        "label": "公文正文",
+        "type": "string",
+        "description": "三号仿宋体字，每个自然段左空二字，回行顶格。层次标题按规范使用不同字体",
+        "required": true,
+        "example": "根据国务院办公厅关于2024年部分节假日安排的通知精神，现将春节放假有关事项通知如下：\n\n一、放假时间\n2024年2月9日至2月17日放假调休，共9天。\n\n二、调休安排\n2月4日（星期日）、2月18日（星期日）上班。\n\n三、工作要求\n各地区、各部门要妥善安排好值班和安全、保卫等工作。"
+      },
+      "attachment": {
+        "label": "附件说明",
+        "type": "string",
+        "description": "正文下空一行左空二字编排，后标全角冒号。多个附件用阿拉伯数字标注顺序号",
+        "required": false,
+        "example": "1.2024年春节值班安排表"
+      },
+      "date": {
+        "label": "成文日期",
+        "type": "string",
+        "description": "右空四字编排，用阿拉伯数字将年、月、日标全，年份标全称，月、日不编虚位",
+        "required": false,
+        "example": "2024年1月25日"
+      }
+    },
+    "版记部分": {
+      "copy_to": {
+        "label": "抄送机关",
+        "type": "string",
+        "description": "四号仿宋体字，左右各空一字编排，回行时与冒号后的首字对齐，最后标句号",
+        "required": false,
+        "example": "党中央各部门，全国人大常委会办公厅，全国政协办公厅"
+      },
+      "print_org": {
+        "label": "印发机关",
+        "type": "string",
+        "description": "四号仿宋体字，左空一字，编排在末条分隔线之上",
+        "required": false,
+        "example": "国务院办公厅"
+      },
+      "print_date": {
+        "label": "印发日期",
+        "type": "string",
+        "description": "四号仿宋体字，右空一字，阿拉伯数字标注，后加\"印发\"二字",
+        "required": false,
+        "example": "2024年1月26日印发"
+      }
+    }
+  },
+  "example": {
+    "copy_number": "000001",
+    "security_level": "",
+    "urgency": "",
+    "sender": "国务院办公厅",
+    "doc_number": "国办发〔2024〕1号",
+    "issuer": "",
+    "title": "关于2024年春节放假安排的通知",
+    "doc_type": "通知",
+    "recipient": "各省、自治区、直辖市人民政府，国务院各部委、各直属机构：",
+    "content": "根据国务院办公厅关于2024年部分节假日安排的通知精神，现将春节放假有关事项通知如下：\n\n一、放假时间\n2024年2月9日（星期五，除夕）至2月17日（星期六，农历正月初八）放假调休，共9天。\n\n二、调休安排\n2月4日（星期日）、2月18日（星期日）上班。\n\n三、工作要求\n各地区、各部门要妥善安排好值班和安全、保卫、疫情防控等工作，遇有重大突发事件，要按规定及时报告并妥善处置，确保人民群众祥和平安度过节日假期。",
+    "attachment": "",
+    "date": "2024年1月25日",
+    "copy_to": "党中央各部门，全国人大常委会办公厅，全国政协办公厅",
+    "print_org": "国务院办公厅",
+    "print_date": "2024年1月26日印发"
+  },
+  "notes": [
+    "正文结构层次序数：第一层\"一、\"（黑体），第二层\"（一）\"（楷体），第三层\"1.\"（仿宋），第四层\"（1）\"（仿宋）",
+    "成文日期中的数字用阿拉伯数字标注，不编虚位（1不编为01）",
+    "上行文应当标注签发人，平行文和下行文不标注",
+    "主送机关名称过多导致首页不能显示正文时，应当将主送机关名称移至版记",
+    "附件应当另面编排，并在版记之前，与公文正文一起装订"
+  ]
+}

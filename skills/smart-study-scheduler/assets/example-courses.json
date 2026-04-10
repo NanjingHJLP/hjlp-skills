@@ -1,0 +1,58 @@
+{
+  "courses": [
+    {
+      "name": "高等数学",
+      "day": "周一",
+      "start_time": "08:00",
+      "end_time": "09:40",
+      "location": "3教201",
+      "teacher": "张教授",
+      "type": "必修"
+    },
+    {
+      "name": "大学英语",
+      "day": "周二",
+      "start_time": "14:00",
+      "end_time": "15:40",
+      "location": "5教102",
+      "teacher": "李老师",
+      "type": "必修"
+    },
+    {
+      "name": "计算机基础",
+      "day": "周三",
+      "start_time": "10:00",
+      "end_time": "11:40",
+      "location": "机房A",
+      "teacher": "王老师",
+      "type": "实验"
+    },
+    {
+      "name": "高等数学",
+      "day": "周三",
+      "start_time": "14:00",
+      "end_time": "15:40",
+      "location": "3教201",
+      "teacher": "张教授",
+      "type": "必修"
+    },
+    {
+      "name": "大学英语",
+      "day": "周四",
+      "start_time": "14:00",
+      "end_time": "15:40",
+      "location": "5教102",
+      "teacher": "李老师",
+      "type": "必修"
+    },
+    {
+      "name": "体育",
+      "day": "周五",
+      "start_time": "16:00",
+      "end_time": "17:30",
+      "location": "体育馆",
+      "teacher": "陈教练",
+      "type": "必修"
+    }
+  ]
+}

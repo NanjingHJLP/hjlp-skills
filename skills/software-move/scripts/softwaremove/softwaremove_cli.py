@@ -1,4 +1,4 @@
-﻿"""softwaremove - CLI harness for SoftwareMove."""
+"""softwaremove - CLI harness for SoftwareMove."""
 from __future__ import annotations
 
 import json
@@ -43,8 +43,7 @@ def is_admin() -> bool:
 def require_admin(reason: str = ""):
     """Restart the current script with admin privileges if not already running as admin.
 
-    Args:
-        reason: Reason for requiring admin privileges (shown to user)
+    Blocks until the elevated process finishes and propagates its exit code.
     """
     if is_admin():
         return
@@ -53,6 +52,7 @@ def require_admin(reason: str = ""):
         return
 
     import ctypes
+    from ctypes import wintypes
 
     if not reason:
         reason = "This operation requires administrator privileges to create junction links in system directories."
@@ -61,18 +61,76 @@ def require_admin(reason: str = ""):
     click.echo("Requesting administrator privileges...")
 
     script = sys.argv[0]
-    # pip entry_points on Windows generate an .exe wrapper; sys.argv[0] is the exe.
-    # For .py scripts we must run them via python.exe; for exe wrappers we run directly.
     is_python_script = script.endswith(".py") or script.endswith(".pyw")
 
+    is_module_run = False
+    module_name = None
+    if script.endswith("__main__.py"):
+        module_name = os.path.basename(os.path.dirname(script))
+        is_module_run = True
+
+    import subprocess
+
+    argv = list(sys.argv)
+    if "--yes" not in argv:
+        argv.append("--yes")
+
+    launch_dir = os.getcwd()
+
+    if is_module_run and module_name:
+        params = subprocess.list2cmdline(["-m", module_name, *argv[1:]])
+        executable = sys.executable
+    elif is_python_script:
+        params = subprocess.list2cmdline(argv)
+        executable = sys.executable
+    else:
+        params = subprocess.list2cmdline(argv[1:])
+        executable = script
+
+    SEE_MASK_NOCLOSEPROCESS = 0x00000040
+
+    class SHELLEXECUTEINFO(ctypes.Structure):
+        _fields_ = [
+            ("cbSize", wintypes.DWORD),
+            ("fMask", wintypes.ULONG),
+            ("hwnd", wintypes.HWND),
+            ("lpVerb", wintypes.LPCWSTR),
+            ("lpFile", wintypes.LPCWSTR),
+            ("lpParameters", wintypes.LPCWSTR),
+            ("lpDirectory", wintypes.LPCWSTR),
+            ("nShow", wintypes.INT),
+            ("hInstApp", wintypes.HINSTANCE),
+            ("lpIDList", ctypes.c_void_p),
+            ("lpClass", wintypes.LPCWSTR),
+            ("hkeyClass", wintypes.HKEY),
+            ("dwHotKey", wintypes.DWORD),
+            ("hIconOrMonitor", wintypes.HANDLE),
+            ("hProcess", wintypes.HANDLE),
+        ]
+
+    sei = SHELLEXECUTEINFO()
+    sei.cbSize = ctypes.sizeof(SHELLEXECUTEINFO)
+    sei.fMask = SEE_MASK_NOCLOSEPROCESS
+    sei.hwnd = None
+    sei.lpVerb = "runas"
+    sei.lpFile = executable
+    sei.lpParameters = params
+    sei.lpDirectory = launch_dir
+    sei.nShow = 1  # SW_SHOWNORMAL
+
     try:
-        if is_python_script:
-            params = " ".join([f'"{arg}"' for arg in sys.argv])
-            ctypes.windll.shell32.ShellExecuteW(None, "runas", sys.executable, params, None, 1)
-        else:
-            params = " ".join([f'"{arg}"' for arg in sys.argv[1:]])
-            ctypes.windll.shell32.ShellExecuteW(None, "runas", script, params, None, 1)
-        sys.exit(0)  # Exit the non-admin instance
+        ret = ctypes.windll.shell32.ShellExecuteExW(ctypes.byref(sei))
+        if not ret:
+            err = ctypes.GetLastError()
+            raise RuntimeError(f"ShellExecuteExW failed with error {err}")
+
+        INFINITE = 0xFFFFFFFF
+        ctypes.windll.kernel32.WaitForSingleObject(sei.hProcess, INFINITE)
+
+        exit_code = wintypes.DWORD()
+        ctypes.windll.kernel32.GetExitCodeProcess(sei.hProcess, ctypes.byref(exit_code))
+        ctypes.windll.kernel32.CloseHandle(sei.hProcess)
+        sys.exit(exit_code.value)
     except Exception as e:
         click.secho(f"Failed to request admin privileges: {e}", fg="red")
         click.echo("Please run this command as Administrator manually.")
@@ -94,6 +152,7 @@ def needs_admin_for_path(path: str) -> bool:
     path_lower = path.lower().replace("/", "\\")
     system_paths = [
         r"c:\program files",
+        r"c:\program files (x86)",
         r"c:\programdata",
         r"c:\windows",
     ]
@@ -357,6 +416,20 @@ def move_start(
     if software_size is None:
         software_size = get_directory_size(source_path)
 
+    progress_cb = None
+    if not as_json:
+        last_pct = [-1]
+
+        def _progress_cb(current: int, total: int, name: str) -> None:
+            if total <= 0:
+                return
+            pct = int(current / total * 100)
+            if pct != last_pct[0] and pct % 10 == 0:
+                click.echo(f"  {pct}% complete")
+                last_pct[0] = pct
+
+        progress_cb = _progress_cb
+
     result = move_core.move(
         source_path=source_path,
         target_path=target_path,
@@ -365,6 +438,7 @@ def move_start(
         link_mode=link_mode,
         history_path=ctx.obj["history_path"],
         record_history=not no_record,
+        progress_cb=progress_cb,
     )
 
     # Pretty print result if not JSON
@@ -377,13 +451,6 @@ def move_start(
                 click.echo(f"  Source: {result.get('source_path')}")
                 click.echo(f"  Target: {result.get('target_path')}")
                 click.echo(f"  Size: {format_size(result.get('software_size', 0))}")
-            if result.get("skipped_files"):
-                skipped = result["skipped_files"]
-                click.secho(f"  ⚠️  Warning: {len(skipped)} files were skipped (locked/occupied)", fg="yellow")
-                for f in skipped[:5]:
-                    click.echo(f"    - {f}")
-                if len(skipped) > 5:
-                    click.echo(f"    ... and {len(skipped) - 5} more")
         else:
             error_msg = result.get('error', 'Unknown error')
             click.secho(f"✗ Move failed: {error_msg}", fg="red")
@@ -405,6 +472,8 @@ def move_start(
                 click.echo(f'   softwaremove move start --source "{source_path}" --target "{target_path}" --admin')
 
     output(result, as_json)
+    if not result.get("ok"):
+        sys.exit(1)
 
 
 @move.command("check")
@@ -453,6 +522,38 @@ def move_check(ctx: click.Context, source_path: str, software_name: str | None):
     output(result, as_json)
 
 
+@move.command("verify")
+@click.option("--source", "source_path", default=None, type=click.Path(), help="Source install path")
+@click.option("--target", "target_path", default=None, type=click.Path(), help="Target path")
+@click.option("--id", "record_id", default=None, type=int, help="History record id")
+@click.pass_context
+def move_verify(ctx: click.Context, source_path: str | None, target_path: str | None, record_id: int | None):
+    """Verify a completed move by paths or by history record id."""
+    as_json = ctx.obj["as_json"]
+    result = move_core.verify(
+        source_path=source_path,
+        target_path=target_path,
+        record_id=record_id,
+        history_path=ctx.obj["history_path"],
+    )
+
+    if not as_json:
+        if result.get("ok"):
+            click.secho("✓ Verification passed", fg="green")
+            click.echo(f"  Target: {result.get('target_path')}")
+            click.echo(f"  Size: {format_size(result.get('target_size', 0))}")
+            if result.get("is_link"):
+                click.echo(f"  Link: {result.get('source_path')} -> {result.get('link_points_to')}")
+        else:
+            click.secho(f"✗ Verification failed: {result.get('error', 'Unknown error')}", fg="red")
+            for err in result.get("errors", []):
+                click.echo(f"  - {err}")
+
+    output(result, as_json)
+    if not result.get("ok"):
+        sys.exit(1)
+
+
 # ---------------------------------------------------------------------------
 # History
 # ---------------------------------------------------------------------------
@@ -486,8 +587,9 @@ def history_show(ctx: click.Context, record_id: int):
 @history.command("restore")
 @click.option("--id", "record_id", required=True, type=int)
 @click.option("--admin", "require_admin_flag", is_flag=True, default=False, help="Request admin privileges if needed")
+@click.option("--yes", is_flag=True, default=False, hidden=True, help="Auto-approve (for automated runs)")
 @click.pass_context
-def history_restore(ctx: click.Context, record_id: int, require_admin_flag: bool):
+def history_restore(ctx: click.Context, record_id: int, require_admin_flag: bool, yes: bool):
     """Restore a moved software directory by record id."""
     record = history_core.get_record(record_id, ctx.obj["history_path"])
     if not record:
@@ -499,12 +601,15 @@ def history_restore(ctx: click.Context, record_id: int, require_admin_flag: bool
 
     result = move_core.restore(record_id, ctx.obj["history_path"])
     output(result, ctx.obj["as_json"])
+    if not result.get("ok"):
+        sys.exit(1)
 
 
 @history.command("undo")
 @click.option("--admin", "require_admin_flag", is_flag=True, default=False, help="Request admin privileges if needed")
+@click.option("--yes", is_flag=True, default=False, hidden=True, help="Auto-approve (for automated runs)")
 @click.pass_context
-def history_undo(ctx: click.Context, require_admin_flag: bool):
+def history_undo(ctx: click.Context, require_admin_flag: bool, yes: bool):
     """Restore the latest non-restored record."""
     record = history_core.latest_record(ctx.obj["history_path"], restored=False)
     if not record:
@@ -516,6 +621,8 @@ def history_undo(ctx: click.Context, require_admin_flag: bool):
 
     result = move_core.restore(record["id"], ctx.obj["history_path"])
     output(result, ctx.obj["as_json"])
+    if not result.get("ok"):
+        sys.exit(1)
 
 
 @history.command("redo")
@@ -527,8 +634,9 @@ def history_undo(ctx: click.Context, require_admin_flag: bool):
     show_default=True,
 )
 @click.option("--admin", "require_admin_flag", is_flag=True, default=False, help="Request admin privileges if needed")
+@click.option("--yes", is_flag=True, default=False, hidden=True, help="Auto-approve (for automated runs)")
 @click.pass_context
-def history_redo(ctx: click.Context, record_id: int | None, link_mode: str, require_admin_flag: bool):
+def history_redo(ctx: click.Context, record_id: int | None, link_mode: str, require_admin_flag: bool, yes: bool):
     """Re-run a move based on a restored record."""
     if record_id is None:
         record = history_core.latest_record(ctx.obj["history_path"], restored=True)
@@ -543,6 +651,8 @@ def history_redo(ctx: click.Context, record_id: int | None, link_mode: str, requ
 
     result = move_core.redo(record_id, ctx.obj["history_path"], link_mode=link_mode)
     output(result, ctx.obj["as_json"])
+    if not result.get("ok"):
+        sys.exit(1)
 
 
 @history.command("delete")

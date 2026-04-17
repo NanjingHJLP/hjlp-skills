@@ -12,18 +12,32 @@ description: >
 
 用于在磁盘间搬移已安装软件并支持历史还原的技能。
 
-## 安装
+## 安装与运行
 
 ```bash
+# 方式 1：安装到 PATH（推荐）
 cd scripts && pip install -e .
+
+# 方式 2：无需安装，直接运行
+python -m softwaremove scan disk D
 ```
+
+## 目录结构
+
+| 路径 | 说明 |
+|------|------|
+| `SKILL.md` | 技能入口文档（即本文档） |
+| `references/` | 详细使用说明、CLI 实现文档与测试计划 |
+| `scripts/` | `softwaremove` CLI 工具及 Python 包源码 |
+| `assets/` | 共享图标等静态资源 |
 
 ## 工作流程
 
 1. **扫描** → `softwaremove scan disk <盘符>`
 2. **检测** → `softwaremove move check --source <路径> --name <名称>`
 3. **迁移** → `softwaremove move start --source <源路径> --target <目标路径>`
-4. **还原** → `softwaremove history restore --id <编号>`
+4. **验证** → `softwaremove move verify --id <编号>`（或 `--source` + `--target`）
+5. **还原** → `softwaremove history restore --id <编号>`
 
 ## 常用命令
 
@@ -36,6 +50,9 @@ softwaremove move check --source "C:\Users\1\AppData\Local\Figma" --name "Figma"
 
 # 搬移软件（Program Files 目录需加 --admin）
 softwaremove move start --source "C:\Program Files\Docker\Docker" --target "D:\SoftwareMoved\Docker" --admin
+
+# 验证搬迁结果（按历史记录 ID）
+softwaremove move verify --id 1
 
 # 查看历史记录
 softwaremove history list

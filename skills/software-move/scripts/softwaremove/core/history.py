@@ -81,6 +81,22 @@ def mark_restored(record_id: int, path: Optional[str] = None) -> bool:
     return updated
 
 
+def mark_redone(record_id: int, new_record_id: int, path: Optional[str] = None) -> bool:
+    """Mark a record as superseded by a redo operation."""
+    path = path or default_history_path()
+    history = load_history(path)
+    updated = False
+    for record in history:
+        if record.get("id") == record_id:
+            record["redone"] = True
+            record["superseded_by"] = new_record_id
+            updated = True
+            break
+    if updated:
+        _save(path, history)
+    return updated
+
+
 def delete_record(record_id: int, path: Optional[str] = None) -> bool:
     path = path or default_history_path()
     history = load_history(path)

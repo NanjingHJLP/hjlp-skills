@@ -1,4 +1,4 @@
-﻿"""Backend logic for SoftwareMove CLI."""
+"""Backend logic for SoftwareMove CLI."""
 from __future__ import annotations
 
 import os
@@ -34,7 +34,7 @@ def check_running_processes(directory_path: str) -> List[str]:
         )
         if result.returncode == 0 and result.stdout.strip():
             return [p.strip() for p in result.stdout.strip().split('\n') if p.strip()]
-    except Exception:
+    except (OSError, subprocess.SubprocessError):
         pass
     return []
 
@@ -104,7 +104,7 @@ def get_disk_info(disk_letter: str) -> Dict[str, int]:
         try:
             total, used, free = shutil.disk_usage(disk_path)
             return {"total": total, "used": used, "free": free}
-        except Exception:
+        except (OSError, ValueError):
             return {"total": 0, "used": 0, "free": 0}
     return {"total": 0, "used": 0, "free": 0}
 
@@ -114,7 +114,7 @@ def list_installed() -> List[Dict[str, str]]:
         return []
     try:
         import winreg
-    except Exception:
+    except (ImportError, OSError):
         return []
 
     software_list: List[Dict[str, str]] = []
@@ -381,7 +381,8 @@ def check_software_moveable(source_path: str, software_name: str) -> Dict:
     # Check 6: Locked files
     locked = _check_locked_files(source_path)
     if locked:
-        result["warnings"].append(f"⚠️ 发现 {len(locked)} 个被锁定的文件，迁移时将跳过")
+        result["moveable"] = False
+        result["errors"].append(f"发现 {len(locked)} 个文件被占用，无法搬迁。请先关闭相关软件后再试。")
         result["details"]["locked_files"] = locked[:5]  # Only show first 5
 
     # Check 7: System directory files (should be empty after fix)
@@ -400,6 +401,8 @@ def check_software_moveable(source_path: str, software_name: str) -> Dict:
 
 def _check_uwp_app(software_name: str) -> bool:
     """Check if software is a UWP/MSIX app."""
+    if not software_name:
+        return False
     try:
         import winreg
         # Search registry for PackageRootFolder or MSIX indicators
@@ -418,12 +421,12 @@ def _check_uwp_app(software_name: str) -> bool:
                         if name_lower in subkey_name.lower() or subkey_name.lower() in name_lower:
                             winreg.CloseKey(key)
                             return True
-                    except:
+                    except (OSError, ValueError):
                         pass
                 winreg.CloseKey(key)
-            except:
+            except (OSError, FileNotFoundError):
                 pass
-    except:
+    except (ImportError, OSError):
         pass
     return False
 
@@ -431,6 +434,8 @@ def _check_uwp_app(software_name: str) -> bool:
 def _check_registry_references(source_path: str, software_name: str) -> List[str]:
     """Check for registry paths that reference the source directory."""
     refs = []
+    if not source_path:
+        return refs
     try:
         import winreg
         source_lower = source_path.lower().replace("/", "\\")
@@ -445,9 +450,9 @@ def _check_registry_references(source_path: str, software_name: str) -> List[str
         for hkey, base_path in search_paths:
             try:
                 _search_registry_recursive(hkey, base_path, source_lower, refs, max_depth=3)
-            except:
+            except (OSError, RuntimeError):
                 pass
-    except:
+    except (ImportError, OSError):
         pass
     return refs[:10]  # Limit results
 
@@ -457,6 +462,7 @@ def _search_registry_recursive(hkey, path: str, search_term: str, results: List,
     if depth > max_depth:
         return
     try:
+        import winreg
         key = winreg.OpenKey(hkey, path)
         try:
             for i in range(min(winreg.QueryInfoKey(key)[1], 50)):  # Check values
@@ -464,9 +470,9 @@ def _search_registry_recursive(hkey, path: str, search_term: str, results: List,
                     val = winreg.EnumValue(key, i)
                     if val[1] and isinstance(val[1], str) and search_term in val[1].lower():
                         results.append(f"{path}\\{val[0]}")
-                except:
+                except (OSError, ValueError):
                     pass
-        except:
+        except (OSError, ValueError):
             pass
 
         try:
@@ -474,12 +480,12 @@ def _search_registry_recursive(hkey, path: str, search_term: str, results: List,
                 try:
                     subkey_name = winreg.EnumKey(key, i)
                     _search_registry_recursive(hkey, f"{path}\\{subkey_name}", search_term, results, max_depth, depth + 1)
-                except:
+                except (OSError, ValueError):
                     pass
-        except:
+        except (OSError, ValueError):
             pass
         winreg.CloseKey(key)
-    except:
+    except (OSError, FileNotFoundError):
         pass
 
 
@@ -498,34 +504,45 @@ def _check_locked_files(source_path: str) -> List[str]:
 
 
 def _check_uwp_registry(source_path: str) -> bool:
-    """Check if software is registered as UWP/MSIX in registry."""
+    """Check if software is registered as UWP/MSIX in registry or located in typical UWP dirs."""
+    if not source_path:
+        return False
+    source_lower = source_path.lower().replace("/", "\\")
+
+    # Heuristic 1: Common UWP/MSIX install locations
+    uwp_locations = [
+        "\\windowsapps\\",
+        "\\appdata\\local\\packages\\",
+        "\\appdata\\local\\microsoft\\windowsapps\\",
+        "\\program files\\windowsapps\\",
+    ]
+    for loc in uwp_locations:
+        if loc in source_lower:
+            return True
+
+    # Heuristic 2: Registry check for PackageRootFolder
     try:
         import winreg
-        source_lower = source_path.lower().replace("\\", "/")
-        # Check if install location is in AppData (common for UWP apps)
-        if "appdata" in source_lower or "users" in source_lower:
-            # Check WOW6432Node for path references
+        search_paths = [
+            (winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Microsoft\Windows\CurrentVersion\Appx"),
+            (winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Classes\Local Settings\Software\Microsoft\Windows\CurrentVersion\AppModel"),
+        ]
+        for hkey, path in search_paths:
             try:
-                key = winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\WOW6432Node\Baidu")
-                for i in range(winreg.QueryInfoKey(key)[0]):
+                key = winreg.OpenKey(hkey, path)
+                for i in range(winreg.QueryInfoKey(key)[1]):
                     try:
-                        subkey_name = winreg.EnumKey(key, i)
-                        subkey = winreg.OpenKey(key, subkey_name)
-                        try:
-                            val = winreg.QueryValueEx(subkey, "installDir")[0]
-                            if source_lower.replace("/", "\\") in val.lower().replace("/", "\\"):
-                                winreg.CloseKey(subkey)
+                        name, val, _ = winreg.EnumValue(key, i)
+                        if name == "PackageRootFolder" and isinstance(val, str):
+                            if source_lower.startswith(val.lower().replace("/", "\\")):
                                 winreg.CloseKey(key)
                                 return True
-                        except:
-                            pass
-                        winreg.CloseKey(subkey)
-                    except:
+                    except (OSError, ValueError):
                         pass
                 winreg.CloseKey(key)
-            except:
+            except (OSError, FileNotFoundError):
                 pass
-    except:
+    except (ImportError, OSError):
         pass
     return False
 
@@ -621,6 +638,16 @@ def _move_file_with_retry(source: str, target: str, retries: int = 3, log_cb: Lo
             last_err = exc
             if attempt < retries - 1:
                 time.sleep(0.5)
+    # Cross-device shutil.move may have partially copied the file before failing.
+    # Clean up any leftover target to avoid incomplete migration.
+    if os.path.exists(target):
+        try:
+            if os.path.isdir(target):
+                shutil.rmtree(target, ignore_errors=True)
+            else:
+                os.remove(target)
+        except (OSError, PermissionError):
+            pass
     _log(log_cb, f"跳过锁定文件: {source} -> {target} ({last_err})")
     return False
 
@@ -634,26 +661,37 @@ def _count_files(path: str) -> int:
     return max(count, 1)
 
 
-def _get_available_path(path: str) -> str:
-    if not os.path.exists(path):
-        return path
-    directory = os.path.dirname(path)
-    name = os.path.basename(path)
-    if os.path.isfile(path) and "." in name:
-        name_base, ext = os.path.splitext(name)
-    else:
-        name_base, ext = name, ""
-    counter = 2
-    while True:
-        new_name = f"{name_base} ({counter}){ext}"
-        new_path = os.path.join(directory, new_name)
-        if not os.path.exists(new_path):
-            return new_path
-        counter += 1
-        if counter > 1000:
-            import time
-            timestamp = int(time.time())
-            return os.path.join(directory, f"{name_base}_{timestamp}{ext}")
+def _get_file_attributes(path: str) -> Optional[int]:
+    if platform.system() != "Windows":
+        return None
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        GetFileAttributesW = ctypes.windll.kernel32.GetFileAttributesW
+        GetFileAttributesW.argtypes = [wintypes.LPCWSTR]
+        GetFileAttributesW.restype = wintypes.DWORD
+        attrs = GetFileAttributesW(os.path.normpath(path))
+        if attrs == 0xFFFFFFFF:
+            return None
+        return int(attrs)
+    except (ImportError, OSError, AttributeError):
+        return None
+
+
+def _path_exists_or_link(path: str) -> bool:
+    if os.path.exists(path) or os.path.islink(path):
+        return True
+    attrs = _get_file_attributes(path)
+    return attrs is not None
+
+
+def _target_has_entries(path: str) -> bool:
+    try:
+        with os.scandir(path) as entries:
+            return next(entries, None) is not None
+    except (OSError, PermissionError, StopIteration):
+        return False
 
 
 def _create_link(link_path: str, target_path: str, link_mode: str, log_cb: LogFn) -> None:
@@ -671,7 +709,7 @@ def _create_link(link_path: str, target_path: str, link_mode: str, log_cb: LogFn
         try:
             import ctypes
             is_admin = ctypes.windll.shell32.IsUserAnAdmin()
-        except Exception:
+        except (ImportError, OSError, AttributeError):
             is_admin = False
         try:
             os.symlink(target_path, link_path, target_is_directory=os.path.isdir(target_path))
@@ -689,12 +727,10 @@ def _create_link(link_path: str, target_path: str, link_mode: str, log_cb: LogFn
             if link_parent and not os.path.exists(link_parent):
                 os.makedirs(link_parent, exist_ok=True)
 
-            # Use shell=True for better path handling with spaces
             result = subprocess.run(
-                f'cmd /c mklink /J "{link_path}" "{target_path}"',
+                ["cmd", "/D", "/c", "mklink", "/J", link_path, target_path],
                 check=True,
                 capture_output=True,
-                shell=True,
                 encoding="utf-8",
                 errors="ignore",
                 creationflags=subprocess.CREATE_NO_WINDOW,
@@ -702,7 +738,7 @@ def _create_link(link_path: str, target_path: str, link_mode: str, log_cb: LogFn
             _log(log_cb, f"Junction created: {link_path} -> {target_path}")
             return
         except subprocess.CalledProcessError as exc:
-            error_msg = exc.stderr.decode("utf-8", errors="ignore") if exc.stderr else str(exc)
+            error_msg = exc.stderr if exc.stderr else str(exc)
             raise RuntimeError(f"Failed to create junction: {error_msg}")
 
     raise RuntimeError(f"Unsupported link_mode: {link_mode}")
@@ -730,6 +766,9 @@ class _Mover:
         self.skipped_files: List[str] = []
         self.rollback_needed = False
         self.original_source_path = source_path
+        self.backup_path: Optional[str] = None
+        self.link_created = False
+        self.rollback_done = False
 
     def run(self) -> Dict:
         try:
@@ -737,12 +776,16 @@ class _Mover:
             _log(self.log_cb, f"Source: {self.source_path}")
             _log(self.log_cb, f"Target: {self.target_path}")
 
-            if not os.path.exists(self.source_path):
+            if not _path_exists_or_link(self.source_path):
                 raise RuntimeError(f"Source path not found: {self.source_path}")
 
             # Check if already a link (skip migration)
             if is_link_or_junction(self.source_path):
                 real_path = os.path.realpath(self.source_path)
+                if not os.path.exists(real_path):
+                    raise RuntimeError(
+                        f"Source path is a broken junction/link: {self.source_path} -> {real_path}"
+                    )
                 _log(self.log_cb, f"Source is already a link pointing to: {real_path}")
                 return {
                     "ok": True,
@@ -758,10 +801,11 @@ class _Mover:
             if target_parent and not os.path.exists(target_parent):
                 os.makedirs(target_parent, exist_ok=True)
 
-            original_target = self.target_path
-            self.target_path = _get_available_path(self.target_path)
-            if self.target_path != original_target:
-                _log(self.log_cb, f"Target exists, renamed to: {self.target_path}")
+            if _path_exists_or_link(self.target_path):
+                raise RuntimeError(
+                    f"Target path already exists: {self.target_path}. "
+                    "Please choose an empty destination path."
+                )
 
             total_files = _count_files(self.source_path)
             _log(self.log_cb, f"Total files: {total_files}")
@@ -769,8 +813,15 @@ class _Mover:
             # Step 1: Move files from source to target
             self._move_directory(self.source_path, self.target_path, total_files)
 
+            # If any files were skipped, rollback immediately to keep atomicity
             if self.skipped_files:
-                _log(self.log_cb, f"Warning: {len(self.skipped_files)} files were skipped (locked or permission denied)")
+                _log(self.log_cb, f"Move aborted: {len(self.skipped_files)} files were skipped (locked or permission denied). Rolling back...")
+                self._rollback()
+                return {
+                    "ok": False,
+                    "error": f"{len(self.skipped_files)} files could not be moved (likely locked by running processes). Please close the related software and try again.",
+                    "skipped_files": self.skipped_files,
+                }
 
             # Step 2: Remove empty directories in source
             _log(self.log_cb, "Cleaning up empty directories...")
@@ -784,21 +835,18 @@ class _Mover:
                     os.rename(self.source_path, backup_path)
                     _log(self.log_cb, f"Renamed source to backup: {backup_path}")
                     self.source_path = backup_path
+                    self.backup_path = backup_path
                     rename_success = True
                 except OSError as e:
                     _log(self.log_cb, f"Warning: Could not rename source directory: {e}")
 
                 if not rename_success:
-                    # Cannot create junction at original path because it's still occupied
                     error_detail = f"Source directory could not be cleaned or renamed: {self.original_source_path}"
-                    if self.skipped_files:
-                        error_detail += f". {len(self.skipped_files)} files were skipped (likely locked by running processes)."
                     _log(self.log_cb, "Rolling back due to uncleanable source directory...")
                     self._rollback()
                     return {
                         "ok": False,
                         "error": error_detail,
-                        "skipped_files": self.skipped_files,
                     }
             else:
                 # Source directory was fully removed, use original path for link
@@ -809,6 +857,14 @@ class _Mover:
             _log(self.log_cb, f"Creating junction link: {link_path} -> {self.target_path}")
             try:
                 _create_link(link_path, self.target_path, self.link_mode, self.log_cb)
+                self.link_created = self.link_mode.lower() != "none"
+                verify_result = verify_move(
+                    link_path,
+                    self.target_path,
+                    expected_size=self.software_size,
+                )
+                if not verify_result.get("ok"):
+                    raise RuntimeError("; ".join(verify_result.get("errors", ["Move verification failed"])))
             except Exception as link_exc:
                 # Link creation failed - rollback
                 _log(self.log_cb, f"Failed to create junction: {link_exc}")
@@ -817,13 +873,13 @@ class _Mover:
                 raise RuntimeError(f"Failed to create junction link: {link_exc}")
 
             # Step 4: Clean up backup if exists
-            if self.source_path != self.original_source_path:
-                if os.path.exists(self.source_path):
+            if self.backup_path:
+                if os.path.exists(self.backup_path):
                     try:
-                        if os.path.isdir(self.source_path):
-                            shutil.rmtree(self.source_path, ignore_errors=True)
+                        if os.path.isdir(self.backup_path):
+                            shutil.rmtree(self.backup_path, ignore_errors=True)
                         else:
-                            os.remove(self.source_path)
+                            os.remove(self.backup_path)
                         _log(self.log_cb, "Backup removed")
                     except Exception as e:
                         _log(self.log_cb, f"Warning: Could not remove backup: {e}")
@@ -840,7 +896,7 @@ class _Mover:
                 result["warning"] = f"{len(self.skipped_files)} files were skipped during move"
             return result
         except Exception as exc:
-            if self.rollback_needed:
+            if self.rollback_needed or self.link_created or self.backup_path:
                 self._rollback()
             return {"ok": False, "error": str(exc)}
 
@@ -880,6 +936,15 @@ class _Mover:
                     _progress(self.progress_cb, current_file, total_files, file)
 
     def _rollback(self) -> None:
+        if self.rollback_done:
+            return
+        if self.link_created and is_link_or_junction(self.original_source_path):
+            try:
+                _remove_link(self.original_source_path)
+            except (OSError, PermissionError):
+                pass
+
+        rollback_success = True
         for source_file, target_file in reversed(self.moved_files):
             try:
                 if os.path.exists(target_file):
@@ -887,8 +952,48 @@ class _Mover:
                     if target_dir and not os.path.exists(target_dir):
                         os.makedirs(target_dir, exist_ok=True)
                     shutil.move(target_file, source_file)
-            except Exception:
+                if os.path.exists(target_file):
+                    rollback_success = False
+            except (OSError, shutil.Error):
+                rollback_success = False
                 continue
+
+        if self.backup_path and os.path.exists(self.backup_path):
+            try:
+                self._merge_backup_into_source()
+            except (OSError, shutil.Error):
+                pass
+
+        # Clean up target only if all tracked files were successfully rolled back.
+        # If rollback was partial, leave target intact so the user can recover.
+        if os.path.exists(self.target_path) and os.path.isdir(self.target_path):
+            try:
+                if rollback_success:
+                    shutil.rmtree(self.target_path, ignore_errors=True)
+                    _log(self.log_cb, f"Removed target directory after successful rollback: {self.target_path}")
+                else:
+                    _log(self.log_cb, f"Warning: target directory still contains files after partial rollback: {self.target_path}")
+            except (OSError, PermissionError):
+                pass
+
+        self.link_created = False
+        self.rollback_done = True
+
+    def _merge_backup_into_source(self) -> None:
+        if not self.backup_path:
+            return
+
+        for root, _, files in os.walk(self.backup_path):
+            rel_path = os.path.relpath(root, self.backup_path)
+            target_dir = self.original_source_path if rel_path == "." else os.path.join(self.original_source_path, rel_path)
+            os.makedirs(target_dir, exist_ok=True)
+            for file in files:
+                source_file = os.path.join(root, file)
+                target_file = os.path.join(target_dir, file)
+                if not os.path.exists(target_file):
+                    shutil.move(source_file, target_file)
+
+        shutil.rmtree(self.backup_path, ignore_errors=True)
 
 
 class _Restorer:
@@ -960,29 +1065,18 @@ class _Restorer:
 
 
 def is_link_or_junction(path: str) -> bool:
-    if not os.path.exists(path):
-        return False
     if os.path.islink(path):
         return True
+    attrs = _get_file_attributes(path)
+    if attrs is not None and attrs & 0x400:
+        return True
     try:
-        import ctypes
-        from ctypes import wintypes
-        FILE_ATTRIBUTE_REPARSE_POINT = 0x400
-        GetFileAttributesW = ctypes.windll.kernel32.GetFileAttributesW
-        GetFileAttributesW.argtypes = [wintypes.LPCWSTR]
-        GetFileAttributesW.restype = wintypes.DWORD
-        win_path = os.path.normpath(path)
-        attrs = GetFileAttributesW(win_path)
-        if attrs != 0xFFFFFFFF and attrs & FILE_ATTRIBUTE_REPARSE_POINT:
+        abs_path = os.path.abspath(path)
+        real_path = os.path.realpath(path)
+        if abs_path != real_path:
             return True
-    except Exception:
-        try:
-            abs_path = os.path.abspath(path)
-            real_path = os.path.realpath(path)
-            if abs_path != real_path:
-                return True
-        except Exception:
-            pass
+    except (OSError, ValueError):
+        pass
     return False
 
 
@@ -995,3 +1089,58 @@ def _remove_link(path: str) -> None:
             os.rmdir(path)
     else:
         os.remove(path)
+
+
+def verify_move(source_path: str, target_path: str, expected_size: int = 0) -> Dict:
+    """Verify that a move completed correctly.
+
+    Checks:
+    - target_path exists
+    - source_path is a link/junction (if it exists)
+    - link points to target_path
+    - target directory size
+    """
+    result = {
+        "ok": False,
+        "source_path": source_path,
+        "target_path": target_path,
+        "target_exists": False,
+        "target_size": 0,
+        "target_has_entries": False,
+        "is_link": False,
+        "link_points_to": None,
+        "errors": [],
+    }
+
+    if not os.path.exists(target_path):
+        result["errors"].append(f"Target path does not exist: {target_path}")
+        return result
+
+    result["target_exists"] = True
+    result["target_size"] = get_directory_size(target_path)
+    result["target_has_entries"] = _target_has_entries(target_path)
+
+    if expected_size > 0 and result["target_size"] == 0 and not result["target_has_entries"]:
+        result["errors"].append(f"Target path is empty after move: {target_path}")
+        return result
+
+    if _path_exists_or_link(source_path):
+        if is_link_or_junction(source_path):
+            result["is_link"] = True
+            real = os.path.realpath(source_path)
+            real_norm = os.path.normpath(real).lower()
+            target_norm = os.path.normpath(target_path).lower()
+            result["link_points_to"] = real
+            if real_norm != target_norm:
+                result["errors"].append(
+                    f"Source junction/link points to {real}, expected {target_path}"
+                )
+                return result
+        else:
+            result["errors"].append(
+                f"Source path still exists and is not a junction/link: {source_path}"
+            )
+            return result
+
+    result["ok"] = True
+    return result

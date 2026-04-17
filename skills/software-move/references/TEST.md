@@ -16,6 +16,7 @@
 模块：utils/softwaremove_backend.py
 - format_size 格式化大小边界
 - move_software（link_mode=none）在临时文件夹中迁移文件
+- verify_move 验证 junction 搬迁后的链接指向和目标大小
 
 ## 端到端测试计划
 
